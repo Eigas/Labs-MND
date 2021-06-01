@@ -1,368 +1,170 @@
-from random import randint
-from numpy.linalg import det
-from copy import deepcopy
-from scipy.stats import t
+import random
+import numpy as np
+from scipy.stats import f, t
+from sklearn import linear_model
+from time import perf_counter
 
+counter_1 = 0
+counter_2 = 0
+counter_3 = 0
+for i in range(10):
+    m = 3
+    n = 15
 
-def Naturalize(MatrixOfPlan, MinMaxArr, flag):
-    result = []
-    for i in range(len(MatrixOfPlan)):
-        if i < 8:
-            result.append(MinMaxArr[1]) if MatrixOfPlan[i] == 1 else result.append(MinMaxArr[0])
+    x1min = -10
+    x1max = 10
+    x2min = -10
+    x2max = 2
+    x3min = -10
+    x3max = 4
+    # максимальне та мінімальне значення
+    ymax = 200 + (x1max + x2max + x3max) / 3
+    ymin = 200 + (x1min + x2min + x3min) / 3
+    # матриця ПФЕ
+    xn = [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+          [-1, -1, -1, -1, 1, 1, 1, 1, -1.215, 1.215, 0, 0, 0, 0, 0],
+          [-1, -1, 1, 1, -1, -1, 1, 1, 0, 0, -1.215, 1.215, 0, 0, 0],
+          [-1, 1, -1, 1, -1, 1, -1, 1, 0, 0, 0, 0, -1.215, 1.215, 0]]
+
+    x1x2_norm, x1x3_norm, x2x3_norm, x1x2x3_norm, x1kv_norm, x2kv_norm, x3kv_norm = [0] * n, [0] * n, [0] * n, [0] * n, \
+                                                                                    [0] * n, [0] * n, [0] * n
+
+    for i in range(n):
+        x1x2_norm[i] = xn[1][i] * xn[2][i]
+        x1x3_norm[i] = xn[1][i] * xn[3][i]
+        x2x3_norm[i] = xn[2][i] * xn[3][i]
+        x1x2x3_norm[i] = xn[1][i] * xn[2][i] * xn[3][i]
+        x1kv_norm[i] = round(xn[1][i] ** 2, 3)
+        x2kv_norm[i] = round(xn[2][i] ** 2, 3)
+        x3kv_norm[i] = round(xn[3][i] ** 2, 3)
+    # заповнення у(генерація)
+    Y_matrix = [[random.randint(int(ymin), int(ymax)) for i in range(m)] for j in range(n)]
+    # вивід данних за допомогою цикла
+    print("Матриця планування y:")
+    for i in range(15):
+        print(Y_matrix[i])
+
+    x01 = (x1max + x1min) / 2
+    x02 = (x2max + x2min) / 2
+    x03 = (x3max + x3min) / 2
+
+    delta_x1 = x1max - x01
+    delta_x2 = x2max - x02
+    delta_x3 = x3max - x03
+    x0 = [1] * n
+    x1 = [-10, -10, -10, -10, 10, 10, 10, 10, -1.215 * delta_x1 + x01, 1.215 * delta_x1 + x01, x01, x01, x01, x01, x01]
+    x2 = [-10, -10, 2, 2, -10, -10, 2, 2, x02, x02, -1.215 * delta_x2 + x02, 1.215 * delta_x2 + x02, x02, x02, x02]
+    x3 = [-10, 4, -10, 4, -10, 4, -10, 4, x03, x03, x03, x03, -1.215 * delta_x3 + x03, 1.215 * delta_x3 + x03, x03]
+    # заповнення нулями х1х2, х1х3, х1х2х3
+    x1x2, x1x3, x2x3, x1x2x3 = [0] * n, [0] * n, [0] * n, [0] * n
+    # заповнення нулями х1kv, х2kv, х3kv
+    x1kv, x2kv, x3kv = [0] * 15, [0] * 15, [0] * 15
+
+    for i in range(n):
+        x1x2[i] = round(x1[i] * x2[i], 3)
+        x1x3[i] = round(x1[i] * x3[i], 3)
+        x2x3[i] = round(x2[i] * x3[i], 3)
+        x1x2x3[i] = round(x1[i] * x2[i] * x3[i], 3)
+        x1kv[i] = round(x1[i] ** 2, 3)
+        x2kv[i] = round(x2[i] ** 2, 3)
+        x3kv[i] = round(x3[i] ** 2, 3)
+    # середні у
+    Y_average = []
+    for i in range(len(Y_matrix)):
+        Y_average.append(np.mean(Y_matrix[i], axis=0))
+        Y_average = [round(i, 3) for i in Y_average]
+    # формуємо списки b i a
+    list_for_b = list(zip(xn[0], xn[1], xn[2], xn[3], x1x2_norm, x1x3_norm, x2x3_norm, x1x2x3_norm, x1kv_norm,
+                          x2kv_norm, x3kv_norm))
+    list_for_a = list(zip(x0, x1, x2, x3, x1x2, x1x3, x2x3, x1x2x3, x1kv, x2kv, x3kv))
+    # вивід матриці планування Х
+    print("Матриця планування з нормованими коефіцієнтами X:")
+    for i in range(15):
+        print(list_for_b[i])
+
+    skm = linear_model.LinearRegression(fit_intercept=False)
+    skm.fit(list_for_b, Y_average)
+    b = skm.coef_
+    b = [round(i, 3) for i in b]
+
+    print("Рівняння регресії зі знайденими коефіцієнтами: \n" "y = {} + {}*x1 + {}*x2 + {}*x3 + {}*x1x2 + {}*x1x3 +"
+          " {}*x2x3 + {}*x1x2x3 {}*x1^2 + {}*x2^2 + {}*x3^2".format(b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+                                                                    b[8],
+                                                                    b[9], b[10]))
+
+    print("Перевірка за критерієм Кохрена")
+    print("Середні значення відгуку за рядками:", "\n", +Y_average[0], Y_average[1], Y_average[2], Y_average[3],
+          Y_average[4], Y_average[5], Y_average[6], Y_average[7])
+    # розрахунок дисперсій
+    dispersions = []
+    for i in range(len(Y_matrix)):
+        a = 0
+        for k in Y_matrix[i]:
+            a += (k - np.mean(Y_matrix[i], axis=0)) ** 2
+        dispersions.append(a / len(Y_matrix[i]))
+    # експериментально
+    start_1 = perf_counter()
+    Gp = max(dispersions) / sum(dispersions)
+    # теоретично
+    Gt = 0.3346
+    # перевірка однорідності дисперсій
+    if Gp < Gt:
+        print("Дисперсія однорідна")
+    else:
+        print("Дисперсія неоднорідна")
+    counter_1 += perf_counter() - start_1
+
+    # критерій Стьюдента
+    print(" Перевірка значущості коефіцієнтів за критерієм Стьюдента")
+    sb = sum(dispersions) / len(dispersions)
+    sbs = (sb / (n * m)) ** 0.5
+
+    t_list = [abs(b[i]) / sbs for i in range(0, 11)]
+
+    d = 0
+    res = [0] * 11
+    start_2 = perf_counter()
+    coef_1 = []
+    coef_2 = []
+    F3 = (m - 1) * n
+    # перевірка значущості коефіцієнтів(scipy)
+    time_check = 0
+    for i in range(n - 4):
+        if t_list[i] > t.ppf(q=0.975, df=F3):
+            coef_1.append(b[i])
+            res[i] = b[i]
+            d += 1
+
         else:
-            x0 = (max(MinMaxArr) + min(MinMaxArr)) / 2
-            dx = x0 - min(MinMaxArr)
-            value = None
-            if flag == 1:
-                value = MatrixOfPlan[i] * dx + x0 if i == 8 or 9 else x0
-            elif flag == 2:
-                value = MatrixOfPlan[i] * dx + x0 if i == 10 or 11 else x0
-            elif flag == 3:
-                value = MatrixOfPlan[i] * dx + x0 if i == 12 or 13 else x0
-            result.append(value)
-    return result
+            coef_2.append(b[i])
+            res[i] = 0
+    counter_2 += perf_counter() - start_2
+    # вивід
+    print("Значущі коефіцієнти регресії:", coef_1)
+    print("Незначущі коефіцієнти регресії:", coef_2)
 
+    # значення y з коефіцієнтами регресії
+    y_st = []
+    for i in range(n):
+        y_st.append(res[0] + res[1] * xn[1][i] + res[2] * xn[2][i] + res[3] * xn[3][i] + res[4] * x1x2_norm[i] \
+                    + res[5] * x1x3_norm[i] + res[6] * x2x3_norm[i] + res[7] * x1x2x3_norm[i])
+    print("Значення з отриманими коефіцієнтами:\n", y_st)
 
-def Сocharan(y_arr, y_avg, m, N):
-    dispersion = []
-    for i in range(len(y_arr[0])):
-        current_sum = 0
-        for j in range(len(y_arr)):
-            current_sum += (y_arr[j][i] - y_avg[j]) ** 2
-        dispersion.append(current_sum / len(y_arr))
-
-    print('dispersion:', dispersion)
-
-    gp = max(dispersion) / sum(dispersion)
-    print('Gp =', gp)
-
-    # Рівень значимості q = 0.05
-    # f1 = m - 1
-    # f2 = N
-
-    # За таблицею Gт = 0.3346
-    if gp < 0.3346:
-        print('Дисперсія однорідна')
-        return dispersion
+    # критерій Фішера
+    print("\nПеревірка адекватності за критерієм Фішера\n")
+    Sad = m * sum([(y_st[i] - Y_average[i]) ** 2 for i in range(n)]) / (n - d)
+    Fp = Sad / sb
+    F4 = n - d
+    start_3 = 0
+    # перевірка за допомогою scipy
+    if Fp < f.ppf(q=0.95, dfn=F4, dfd=F3):
+        print("Рівняння регресії адекватне при рівні значимості 0.05")
     else:
-        print('Дисперсія неоднорідна')
-        return None
+        print("Рівняння регресії неадекватне при рівні значимості 0.05")
+    counter_3 += perf_counter() - start_3
 
+time_kohr, time_st, time_phis = float(counter_1)/float(10), float(counter_2)/float(10), float(counter_3)/float(10)
 
-def Students(plan1x0, plan1x1, plan1x2, plan1x3, y_avg_arr, dispersion, m):
-    # Оцінка значимості коефіцієнтів регресії згідно критерію Стьюдента
-    s2b = sum(dispersion) / 15
-    s2bs_avg = s2b / 15 * m
-    sb = s2bs_avg ** (1 / 2)
-
-    beta_arr = [
-        sum([y_avg_arr[i] * plan1x0[i] for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x1[i] for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x2[i] for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x3[i] for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x1[i] * plan1x2[i] for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x1[i] * plan1x3[i] for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x2[i] * plan1x3[i] for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x1[i] * plan1x2[i] * plan1x3[i] for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x1[i] ** 2 for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x2[i] ** 2 for i in range(15)]) / 15,
-        sum([y_avg_arr[i] * plan1x3[i] ** 2 for i in range(15)]) / 15
-    ]
-
-    print('beta:', beta_arr)
-    t_arr = [abs(beta_arr[i]) / sb for i in range(11)]
-    print('t:', t_arr)
-
-    # f3 = f1*f2 = 2*15 = 30
-    f1 = m - 1
-    f2 = 15
-    f3 = f1 * f2
-
-    b_arr = []
-    for i in range(len(t_arr)):
-        if t_arr[i] > t.ppf(q=0.975, df=f3):
-            b_arr.append(t_arr[i])
-        else:
-            print(f'Коефіцієнт b{i} приймаємо не значним')
-            b_arr.append(0)
-
-    return b_arr, s2b
-
-
-def Fisher(b_arr, s2b, y_avg, y_res, m):
-    # Критерій Фішера
-    d = len([i for i in b_arr if i != 0])  # кількість значимих коефіцієнтів
-    print(f'd = {d}')
-    s2_ad = m * sum([(y_res[i] - y_avg[i]) ** 2 for i in range(15)]) / 15 - d
-    fp = s2_ad / s2b
-    print(f'Fp = {fp}')
-
-
-    # Fт = 2.1
-    if fp > 2.1:
-        print('Рівняння регресії неадекватно оригіналу при рівні значимості 0.05')
-    else:
-        print('Рівняння регресії адекватно оригіналу при рівні значимості 0.05')
-
-
-def main(m):
-    N = 15
-
-    x1 = [-10, 10]
-    x2 = [-10, 2]
-    x3 = [-10, 4]
-
-    # Величина зоряного плеча
-    l = 1.215
-
-    # Матриця планування з нормованих значень
-    plan1x0 = [1 for _ in range(N)]
-    plan1x1 = [-1, -1, 1, 1, -1, -1, 1, 1, -l, l, 0, 0, 0, 0, 0]
-    plan1x2 = [-1, 1, -1, 1, -1, 1, -1, 1, 0, 0, -l, l, 0, 0, 0]
-    plan1x3 = [1, -1, -1, 1, -1, 1, 1, -1, 0, 0, 0, 0, -l, l, 0]
-    print('x1:', plan1x1)
-    print('x2:', plan1x2)
-    print('x3:', plan1x3)
-    print('-' * 100)
-
-    # Матриця планування з натуралізованих значень
-    plan2x1 = Naturalize(plan1x1, x1, 1)
-    plan2x2 = Naturalize(plan1x2, x2, 2)
-    plan2x3 = Naturalize(plan1x3, x3, 3)
-
-    # Мультиплікативні значення факторів
-    plan2x4 = [plan2x1[i] * plan2x2[i] for i in range(len(plan2x1))]
-    plan2x5 = [plan2x1[i] * plan2x3[i] for i in range(len(plan2x1))]
-    plan2x6 = [plan2x2[i] * plan2x3[i] for i in range(len(plan2x1))]
-    plan2x7 = [plan2x1[i] * plan2x2[i] * plan2x3[i] for i in range(len(plan2x1))]
-
-    # Квадратичні значення факторів
-    plan2x8 = [plan2x1[i] ** 2 for i in range(len(plan2x1))]
-    plan2x9 = [plan2x2[i] ** 2 for i in range(len(plan2x1))]
-    plan2x10 = [plan2x3[i] ** 2 for i in range(len(plan2x1))]
-
-    print(f'x1: {plan2x1}')
-    print(f'x2: {plan2x2}')
-    print(f'x3: {plan2x3}')
-    print(f'x4: {plan2x4}')
-    print(f'x5: {plan2x5}')
-    print(f'x6: {plan2x6}')
-    print(f'x7: {plan2x7}')
-    print(f'x8: {plan2x8}')
-    print(f'x9: {plan2x9}')
-    print(f'x10: {plan2x10}')
-
-    x_avg_max = (max(plan2x1) + max(plan2x2) + max(plan2x3)) / 3
-    x_avg_min = (min(plan2x1) + min(plan2x2) + min(plan2x3)) / 3
-    print()
-    print(f'x_avg_max = {x_avg_max}')
-    print(f'x_avg_min = {x_avg_min}')
-    print('-' * 100)
-
-    # Діапазон y
-    y_max = int(200 + x_avg_max)
-    y_min = int(200 + x_avg_min)
-    print(f'y_max = {y_max}')
-    print(f'y_min = {y_min}')
-    print()
-
-    y_arr = [[randint(y_min, y_max) for _ in range(N)] for _ in range(m)]
-    for i in range(len(y_arr)):
-        print(f'y{i + 1}: {y_arr[i]}')
-
-    y_avg = []
-    for i in range(len(y_arr[0])):
-        current_sum = 0
-        for j in range(len(y_arr)):
-            current_sum += y_arr[j][i]
-        y_avg.append(current_sum / len(y_arr))
-    print('y average:', y_avg)
-    print('-' * 100)
-
-    dispersion = Сocharan(y_arr, y_avg, m, N)
-    if dispersion:
-        mx1 = sum(plan2x1) / len(plan2x1)
-        mx2 = sum(plan2x2) / len(plan2x2)
-        mx3 = sum(plan2x3) / len(plan2x3)
-        mx4 = sum(plan2x4) / len(plan2x4)
-        mx5 = sum(plan2x5) / len(plan2x5)
-        mx6 = sum(plan2x6) / len(plan2x6)
-        mx7 = sum(plan2x7) / len(plan2x7)
-        mx8 = sum(plan2x8) / len(plan2x8)
-        mx9 = sum(plan2x9) / len(plan2x9)
-        mx10 = sum(plan2x10) / len(plan2x10)
-        my = sum(y_avg) / len(y_avg)
-
-        a1 = sum([y_avg[i] * plan2x1[i] for i in range(len(plan2x1))]) / len(plan2x1)
-        a11 = mx8
-        a12 = mx4
-        a13 = mx5
-        a14 = sum([plan2x1[i] * plan2x4[i] for i in range(len(plan2x1))]) / len(plan2x1)
-        a15 = sum([plan2x1[i] * plan2x5[i] for i in range(len(plan2x1))]) / len(plan2x1)
-        a16 = sum([plan2x1[i] * plan2x6[i] for i in range(len(plan2x1))]) / len(plan2x1)
-        a17 = sum([plan2x1[i] * plan2x7[i] for i in range(len(plan2x1))]) / len(plan2x1)
-        a18 = sum([plan2x1[i] * plan2x8[i] for i in range(len(plan2x1))]) / len(plan2x1)
-        a19 = sum([plan2x1[i] * plan2x9[i] for i in range(len(plan2x1))]) / len(plan2x1)
-
-        a2 = sum([y_avg[i] * plan2x2[i] for i in range(len(plan2x1))]) / len(plan2x2)
-        a21 = a12
-        a22 = mx9
-        a23 = mx6
-        a24 = sum([plan2x2[i] * plan2x4[i] for i in range(len(plan2x2))]) / len(plan2x2)
-        a25 = sum([plan2x2[i] * plan2x5[i] for i in range(len(plan2x2))]) / len(plan2x2)
-        a26 = sum([plan2x2[i] * plan2x6[i] for i in range(len(plan2x2))]) / len(plan2x2)
-        a27 = sum([plan2x2[i] * plan2x7[i] for i in range(len(plan2x2))]) / len(plan2x2)
-        a28 = sum([plan2x2[i] * plan2x8[i] for i in range(len(plan2x2))]) / len(plan2x2)
-        a29 = sum([plan2x2[i] * plan2x9[i] for i in range(len(plan2x2))]) / len(plan2x2)
-
-        a3 = sum([y_avg[i] * plan2x3[i] for i in range(len(plan2x3))]) / len(plan2x3)
-        a31 = a13
-        a32 = a23
-        a33 = mx10
-        a34 = sum([plan2x3[i] * plan2x4[i] for i in range(len(plan2x3))]) / len(plan2x3)
-        a35 = sum([plan2x3[i] * plan2x5[i] for i in range(len(plan2x3))]) / len(plan2x3)
-        a36 = sum([plan2x3[i] * plan2x6[i] for i in range(len(plan2x3))]) / len(plan2x3)
-        a37 = sum([plan2x3[i] * plan2x7[i] for i in range(len(plan2x3))]) / len(plan2x3)
-        a38 = sum([plan2x3[i] * plan2x8[i] for i in range(len(plan2x3))]) / len(plan2x3)
-        a39 = sum([plan2x3[i] * plan2x9[i] for i in range(len(plan2x3))]) / len(plan2x3)
-
-        a4 = sum([y_avg[i] * plan2x4[i] for i in range(len(plan2x4))]) / len(plan2x4)
-        a41 = a14
-        a42 = a24
-        a43 = a34
-        a44 = sum([plan2x4[i] ** 2 for i in range(len(plan2x4))]) / len(plan2x4)
-        a45 = sum([plan2x4[i] * plan2x5[i] for i in range(len(plan2x4))]) / len(plan2x4)
-        a46 = sum([plan2x4[i] * plan2x6[i] for i in range(len(plan2x4))]) / len(plan2x4)
-        a47 = sum([plan2x4[i] * plan2x7[i] for i in range(len(plan2x4))]) / len(plan2x4)
-        a48 = sum([plan2x4[i] * plan2x8[i] for i in range(len(plan2x4))]) / len(plan2x4)
-        a49 = sum([plan2x4[i] * plan2x9[i] for i in range(len(plan2x4))]) / len(plan2x4)
-
-        a5 = sum([y_avg[i] * plan2x5[i] for i in range(len(plan2x5))]) / len(plan2x5)
-        a51 = a15
-        a52 = a25
-        a53 = a35
-        a54 = a45
-        a55 = sum([plan2x5[i] ** 2 for i in range(len(plan2x5))]) / len(plan2x5)
-        a56 = sum([plan2x5[i] * plan2x6[i] for i in range(len(plan2x5))]) / len(plan2x5)
-        a57 = sum([plan2x5[i] * plan2x7[i] for i in range(len(plan2x5))]) / len(plan2x5)
-        a58 = sum([plan2x5[i] * plan2x8[i] for i in range(len(plan2x5))]) / len(plan2x5)
-        a59 = sum([plan2x5[i] * plan2x9[i] for i in range(len(plan2x5))]) / len(plan2x5)
-
-        a6 = sum([y_avg[i] * plan2x6[i] for i in range(len(plan2x6))]) / len(plan2x6)
-        a61 = a16
-        a62 = a26
-        a63 = a36
-        a64 = a46
-        a65 = a56
-        a66 = sum([plan2x6[i] ** 2 for i in range(len(plan2x6))]) / len(plan2x6)
-        a67 = sum([plan2x6[i] * plan2x7[i] for i in range(len(plan2x6))]) / len(plan2x6)
-        a68 = sum([plan2x6[i] * plan2x8[i] for i in range(len(plan2x6))]) / len(plan2x6)
-        a69 = sum([plan2x6[i] * plan2x9[i] for i in range(len(plan2x6))]) / len(plan2x6)
-
-        a7 = sum([y_avg[i] * plan2x7[i] for i in range(len(plan2x7))]) / len(plan2x7)
-        a71 = a17
-        a72 = a27
-        a73 = a37
-        a74 = a47
-        a75 = a57
-        a76 = a67
-        a77 = sum([plan2x7[i] ** 2 for i in range(len(plan2x7))]) / len(plan2x7)
-        a78 = sum([plan2x7[i] * plan2x8[i] for i in range(len(plan2x7))]) / len(plan2x7)
-        a79 = sum([plan2x7[i] * plan2x9[i] for i in range(len(plan2x7))]) / len(plan2x7)
-
-        a8 = sum([y_avg[i] * plan2x8[i] for i in range(len(plan2x8))]) / len(plan2x8)
-        a81 = a18
-        a82 = a28
-        a83 = a38
-        a84 = a48
-        a85 = a58
-        a86 = a68
-        a87 = a78
-        a88 = sum([plan2x8[i] ** 2 for i in range(len(plan2x8))]) / len(plan2x8)
-        a89 = sum([plan2x8[i] * plan2x9[i] for i in range(len(plan2x8))]) / len(plan2x8)
-
-        a9 = sum([y_avg[i] * plan2x9[i] for i in range(len(plan2x9))]) / len(plan2x9)
-        a91 = a19
-        a92 = a29
-        a93 = a39
-        a94 = a49
-        a95 = a59
-        a96 = a69
-        a97 = a79
-        a98 = a89
-        a99 = sum([plan2x9[i] ** 2 for i in range(len(plan2x9))]) / len(plan2x9)
-
-        a10 = sum([y_avg[i] * plan2x10[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a101 = sum([plan2x10[i] * plan2x1[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a102 = sum([plan2x10[i] * plan2x2[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a103 = sum([plan2x10[i] * plan2x3[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a104 = sum([plan2x10[i] * plan2x4[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a105 = sum([plan2x10[i] * plan2x5[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a106 = sum([plan2x10[i] * plan2x6[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a107 = sum([plan2x10[i] * plan2x7[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a108 = sum([plan2x10[i] * plan2x8[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a109 = sum([plan2x10[i] * plan2x9[i] for i in range(len(plan2x10))]) / len(plan2x10)
-        a1010 = sum([plan2x10[i] ** 2 for i in range(len(plan2x10))]) / len(plan2x10)
-
-        main_determinant = [[1, mx1, mx2, mx3, mx4, mx5, mx6, mx7, mx8, mx9, mx10],
-                            [mx1, a11, a21, a31, a41, a51, a61, a71, a81, a91, a101],
-                            [mx2, a12, a22, a32, a42, a52, a62, a72, a82, a92, a102],
-                            [mx3, a13, a23, a33, a43, a53, a63, a73, a83, a93, a103],
-                            [mx4, a14, a24, a34, a44, a54, a64, a74, a84, a94, a104],
-                            [mx5, a15, a25, a35, a45, a55, a65, a75, a85, a95, a105],
-                            [mx6, a16, a26, a36, a46, a56, a66, a76, a86, a96, a106],
-                            [mx7, a17, a27, a37, a47, a57, a67, a77, a87, a97, a107],
-                            [mx8, a18, a28, a38, a48, a58, a68, a78, a88, a98, a108],
-                            [mx9, a19, a29, a39, a49, a59, a69, a79, a89, a99, a109],
-                            [mx10, a101, a102, a103, a104, a105, a106, a107, a108, a109, a1010]]
-
-        column_to_change = [my, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10]
-        main_determinant_value = det(main_determinant)
-
-        matrices = []
-        for i in range(len(main_determinant[0])):
-            new_matrix = deepcopy(main_determinant)
-            for j in range(len(main_determinant)):
-                new_matrix[j][i] = column_to_change[j]
-            matrices.append(new_matrix)
-
-        b_list = []
-        for i in range(len(matrices)):
-            b_list.append(det(matrices[i]) / main_determinant_value)
-        print('-' * 100)
-        print(f'b: {b_list}')
-
-        y_list = []
-        for i in range(len(plan2x1)):
-            y = b_list[0] + b_list[1] * plan2x1[i] + b_list[2] * plan2x2[i] + b_list[3] * plan2x3[i] +\
-                b_list[4] * plan2x4[i] + b_list[5] * plan2x5[i] + b_list[6] * plan2x6[i] + b_list[7] * plan2x7[i] +\
-                b_list[8] * plan2x8[i] + b_list[9] * plan2x9[i] + b_list[10] * plan2x10[i]
-            y_list.append(y)
-            print(f'y = {y}; y avg = {y_avg[i]}')
-        print('-' * 100)
-
-        t_arr, s2b = Students(plan1x0, plan1x1, plan1x2, plan1x3, y_avg, dispersion, m)
-
-        b_arr = []
-        for i in range(len(b_list)):
-            b = b_list[i] if t_arr[i] != 0 else 0
-            b_arr.append(b)
-        print('-' * 100)
-
-        y_res = []
-        for i in range(N):
-            y = b_arr[0] + b_arr[1] * plan1x1[i] + b_arr[2] * plan1x2[i] + b_arr[3] * plan1x3[i] +\
-                b_arr[4] * plan1x1[i] * plan1x2[i] + b_arr[5] * plan1x1[i] * plan1x3[i] +\
-                b_arr[6] * plan1x2[i] * plan1x3[i] + b_arr[7] * plan1x1[i] * plan1x2[i] * plan1x3[i] +\
-                b_arr[8] * plan1x1[i] ** 2 + b_arr[9] * plan1x2[i] ** 2 + b_arr[10] * plan1x3[i] ** 2
-            print(f'ŷ = {y}')
-            y_res.append(y)
-
-        Fisher(b_arr, s2b, y_avg, y_res, m)
-    else:
-        main(m+1)
-        exit()
-
-
-if __name__ == '__main__':
-    main(m=3)
+print("Середній час перевірки за критерієм Кохрена:", time_kohr)
+print("Середній час перевірки за критерієм Стьюдента:", time_st)
+print("Середній час перевірки за критерієм Фішера:", time_phis)
